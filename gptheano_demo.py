@@ -1,18 +1,7 @@
 import sys, os
-import theano
-import theano.tensor as T
-import theano.sandbox.linalg as sT
 import numpy as np
-import cPickle
-import time
 import matplotlib.pyplot as plt
-
 import pdb
-
-
-theano.config.mode= 'FAST_RUN'
-theano.config.optimizer = 'fast_run'
-theano.config.reoptimize_unpickled_function = False
 
 x_val = np.random.rand(100,5)
 y_val = np.random.rand(100,1)
@@ -44,7 +33,6 @@ def plot_regression(x, y, xs, ym, ys2,title):
     plt.title(title)
     #plt.show()
 
-   
 
 def demo():
     demoData = np.load('regression_data.npz')
@@ -63,16 +51,5 @@ def demo():
     plot_regression(x_val, y_val, x_test_val, outputs['y_test_mu'],outputs['y_test_var'],'After Optimization')
     plt.show()
 
-def test_case(x_val, y_val, x_test_val):
-    from gptheano_model import GP_Theano
-    initial_params = {'sigma_n':1.0, 'sigma_f':1.2, 'l_k':1.2}
-    model = GP_Theano(initial_params)
-    outputs = model.get_prediction(x_val, y_val, x_test_val)   
-    
-    model.train(x_val, y_val, num_epoch = 50)
-    pdb.set_trace()
-
-
 if __name__ == '__main__':
-    #test_case(x_val, y_val, x_test_val)
     demo()
