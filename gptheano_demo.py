@@ -23,7 +23,7 @@ MEANCOLOR = [ 0.2109375, 0.63385, 0.1796875, 1.0]
 DATACOLOR = [0.12109375, 0.46875, 1., 1.0]
 
 
-def plot_regression(x, y, xs, ym, ys2):
+def plot_regression(x, y, xs, ym, ys2,title):
     # x: training point
     # y: training target
     # xs: test point
@@ -41,7 +41,8 @@ def plot_regression(x, y, xs, ym, ys2):
     #    plt.axis(axisvals)
     plt.xlabel('input x')
     plt.ylabel('target y')
-    plt.show()
+    plt.title(title)
+    #plt.show()
 
    
 
@@ -55,14 +56,12 @@ def demo():
     initial_params = {'sigma_n':np.log(0.1), 'sigma_f':0., 'l_k':0.}
     model = GP_Theano(initial_params)
     outputs = model.get_prediction(x_val, y_val, x_test_val)   
-    plot_regression(x_val, y_val, x_test_val, outputs['y_test_mu'],outputs['y_test_var'])
+    plot_regression(x_val, y_val, x_test_val, outputs['y_test_mu'],outputs['y_test_var'],'Before Optimization')
     
     model.train(x_val, y_val, num_epoch = 100,lr = 1e-2,decay=None,batch_size=20)
     outputs = model.get_prediction(x_val, y_val, x_test_val)   
-    plot_regression(x_val, y_val, x_test_val, outputs['y_test_mu'],outputs['y_test_var'])
-    
-    
-    pdb.set_trace()
+    plot_regression(x_val, y_val, x_test_val, outputs['y_test_mu'],outputs['y_test_var'],'After Optimization')
+    plt.show()
 
 def test_case(x_val, y_val, x_test_val):
     from gptheano_model import GP_Theano
@@ -72,59 +71,6 @@ def test_case(x_val, y_val, x_test_val):
     
     model.train(x_val, y_val, num_epoch = 50)
     pdb.set_trace()
-
-
-def test_dist_func(x1_val, x2_val):
-    start = time.time()
-    # naive version of distance calculation
-    dist_vals = np.zeros((x1_val.shape[0],x2_val.shape[0]))
-    for i in range(x2_val.shape[0]):
-        dist_vals[:,i] = np.sqrt(np.sum((x1_val - x2_val[i,:])**2,axis=1))
-    print '----naive version time cost  = %f\n'%(time.time()-start)
-
-    start = time.time()
-    # Matrix Factorized calculation.
-    xx_val0 = np.sum(x1_val**2,axis=1).reshape(x1_val.shape[0],1)
-    xc_val0 = np.dot(x1_val,x2_val.T)
-    cc_val0 = np.sum(x2_val**2,axis=1).reshape(1,x2_val.shape[0])
-    dist_vals_f = np.sqrt(xx_val0 - 2*xc_val0 + cc_val0)
-    print '----numpy version time cost  = %f\n'%(time.time()-start)
-
-    if np.sum(dist_vals - dist_vals_f) < 1e-5:
-        print 'Numpy version of factorization calculation is correct !!'
-    else:
-        print 'Numpy version of factorization calculation is correct !!'
-
-
-    # Theano matrix factorized calculation.
-    x1,x2 = T.dmatrices('x1','x2')
-    xx = T.sum(x1**2,axis=1).reshape((x1.shape[0],1))
-    xc = T.dot(x1, x2.T)
-    cc = T.sum(x2**2,axis=1).reshape((1,x2.shape[0]))
-    dist = T.sqrt(xx - 2*xc + cc)
-
-    fs = zip(['xx','xc','cc','dist'],
-             [xx, xc, cc,dist])
-    inputs = {'x1':x1,'x2':x2}
-    input_vals = {'x1':x1_val, 'x2':x2_val}
-
-    f = {n: theano.function(inputs.values(),f,name=n,on_unused_input='ignore') for n,f in fs}
-
-    start = time.time()
-    xx_val1 = f['xx'](*input_vals.values())
-    xc_val1 = f['xc'](*input_vals.values())
-    cc_val1 = f['cc'](*input_vals.values())
-    dist_vals_t = f['dist'](*input_vals.values())
-    print '----theano version time cost  = %f\n'%(time.time()-start)
-
-    #f2 = theano.function((x1,x2),xx,name='xx',on_unused_input='ignore')
-    #xx_val2 = f2(x1_val,x2_val)
-
-    if np.sum(dist_vals - dist_vals_t) < 1e-5:
-        print 'Theano version of factorization calculation is correct !!'
-    else:
-        print 'Theano version of factorization calculation is correct !!'
-
 
 
 if __name__ == '__main__':

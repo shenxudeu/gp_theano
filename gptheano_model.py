@@ -1,5 +1,6 @@
 """
-Gaussian Process Implementation using Theano for symbolic gradient computation.
+Gaussian Process Regression Implementation using Theano for symbolic gradient computation.
+Author: Shen Xu
 """
 
 # To speed Theano up, create ram disk: mount -t tmpfs -o size=512m tmpfs /mnt/randisk
@@ -65,44 +66,59 @@ class GP_Theano(object):
 
     def get_model(self,X, Y, x_test):
         '''
-        return posterior, prediction mean, variance, and log marginal likelihood
+        Gaussian Process Regression model.
+        Reference: C.E. Rasmussen, "Gaussian Process for Machine Learning", MIT Press 2006
+
+        Args:
+            X: tensor matrix, training data
+            Y: tensor matrix, training target
+            x_test: tensor matrix, testing data
+        
+        Returns:
+            K: prior cov matrix
+            Ks: prior joint cov matrix
+            Kss: prior cov matrix for testing data
+            Posterior Distribution:
+                alpha: alpha = inv(K)*(mu-m)
+                sW: vector containing diagonal of sqrt(W)
+                L: L = chol(sW*K*sW+eye(n))
+            y_test_mu: predictive mean
+            y_test_var: predictive variance
+            fs2: predictive latent variance
+        Note: the cov matrix inverse is computed through Cholesky factorization
+        https://makarandtapaswi.wordpress.com/2011/07/08/cholesky-decomposition-for-matrix-inversion/
         '''
-        # compute covariance matrices
-        K = self.covFunc(X,X,'K')
+        # Compute GP prior distribution: mean and covariance matrices (eq 2.13, 2.14)
+        K = self.covFunc(X,X,'K') # pior cov
+        m = T.mean(Y)*T.ones_like(Y) # pior mean
+
+        # Compute GP joint prior distribution between training and test (eq 2.18)
         Ks = self.covFunc(X,x_test,'Ks')
-        # Pay attention, here is the self test cov matrix.
+        # Pay attention!! here is the self test cov matrix.
         Kss = T.ones_like(x_test)
         #Kss = self.covFunc(x_test, x_test,'Kss')
-        
+
         # noise variance of likGauss
         sn2 = T.exp(2*self.sigma_n)
-        
-        # mean func value
-        m = T.mean(Y)*T.ones_like(Y)
 
-        # compute prediction mean, variance
-        # C.E. Rasmussen, "Gaussian Process for Machine Learning", MIT Press 2006, p19
-        # The cov matrix inverse is computed through Cholesky factorization
-        # A = LL^T, A^(-1) = (L^-1)^T(L^(-1))
-        # https://makarandtapaswi.wordpress.com/2011/07/08/cholesky-decomposition-for-matrix-inversion/
+        # Compute posterior distribution with noise: L,alpha,sW,and log_likelihood.
+        sn2 = T.exp(2*self.sigma_n) # noise variance of likGauss
         L = sT.cholesky(K/sn2 + T.identity_like(K))
         sl = sn2
         alpha = T.dot(sT.matrix_inverse(L.T), 
                       T.dot(sT.matrix_inverse(L), (Y-m)) ) / sl
         sW = T.ones_like(T.sum(K,axis=1)).reshape((K.shape[0],1)) / T.sqrt(sl)
-        fmu = m + T.dot(Ks.T, alpha) # Prediction Mu fs|f, eq 2.25 book
-        tmp = T.extra_ops.repeat(sW,x_test.shape[0],axis=1)
-
+        log_likelihood = -0.5 * (T.dot((Y-m).T, alpha)) - T.sum(T.log(T.diag(L))) - X.shape[0] / 2 * T.log(2.*np.pi*sl)
+        
+        # Compute predictive distribution using the computed posterior distribution.
+        fmu = m + T.dot(Ks.T, alpha) # Prediction Mu fs|f, eq 2.25 
         V = T.dot(sT.matrix_inverse(L),T.extra_ops.repeat(sW,x_test.shape[0],axis=1)*Ks)
-        #v = T.dot(sT.matrix_inverse(L),Ks)
-        fs2 = Kss - (T.sum(V*V,axis=0)).reshape((1,V.shape[1])).T # Predication Sigma, eq 2.26 book
+        fs2 = Kss - (T.sum(V*V,axis=0)).reshape((1,V.shape[1])).T # Predication Sigma, eq 2.26
         fs2 = T.maximum(fs2,0) # remove negative variance noise
 
         y_test_mu = fmu
         y_test_var = fs2 + sn2
 
-        log_likelihood = -0.5 * (T.dot((Y-m).T, alpha)) - T.sum(T.log(T.diag(L))) - X.shape[0] / 2 * T.log(2.*np.pi*sl)
-        
         return K, Ks, Kss, y_test_mu, y_test_var, T.sum(log_likelihood), L, alpha,V, fs2,sW
 
     
