@@ -46,7 +46,6 @@ class GP_Theano(object):
         # Variables
         X,Y,x_test = T.dmatrices('X','Y','x_test')
 
-        
         print 'Setting up model ...'
         K, Ks, Kss, y_test_mu, y_test_var, log_likelihood,L,alpha,V,fs2,sW = self.get_model(X, Y, x_test)
 
@@ -65,6 +64,7 @@ class GP_Theano(object):
         self.g = {vn: theano.function(inputs.values(), T.grad(log_likelihood+z,vv),
                                       name=vn,on_unused_input='ignore')
                                       for vn, vv in wrt.iteritems()}
+
 
     def get_model(self,X, Y, x_test):
         '''
@@ -99,11 +99,6 @@ class GP_Theano(object):
         Ks = self.covFunc(X,x_test,'Ks')
         # Pay attention!! here is the self test cov matrix.
         Kss = self.covFunc(x_test,x_test,'Kss',mode='self_test')
-        #Kss = T.ones_like(x_test)
-        #Kss = self.covFunc(x_test, x_test,'Kss')
-
-        # noise variance of likGauss
-        #sn2 = T.exp(2*self.sigma_n)
 
         # Compute posterior distribution with noise: L,alpha,sW,and log_likelihood.
         sn2 = T.exp(2*self.sigma_n) # noise variance of likGauss
@@ -143,9 +138,7 @@ class GP_Theano(object):
                 dist = T.zeros_like(x1)
             else:
                 raise NotImplementedError
-            #k = sf2 * T.exp(-dist/2/ell)
             k = sf2 * T.exp(-dist/2)
-            #f_cov = theano.function((x1,x2),k,name=name,on_unused_input='ignore')
         else:
             raise NotImplementedError
         return k
@@ -203,9 +196,6 @@ class GP_Theano(object):
                 for n in params.keys():
                     g,p = grads[n], params[n]
                     p.set_value(p.get_value() + lr * g)
-                #print '\n\n'
-                #pdb.set_trace()
-                #tmp = 'update parameters'
             if epoch % 100 == 0:    
                 print 'On Epoch %d, Log Likelihood = '%epoch, outputs['log_likelihood']
         print 'END Training, Log Likelihood = ', outputs['log_likelihood']
