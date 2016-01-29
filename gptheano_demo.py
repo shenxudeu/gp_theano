@@ -41,12 +41,16 @@ def demo():
     x_test_val = demoData['xstar']        # test data
      
     from gptheano_model import GP_Theano
-    initial_params = {'sigma_n':np.log(0.1), 'sigma_f':0., 'l_k':0.}
+    initial_params = {'mean':np.mean(y_val), 'sigma_n':np.log(0.1), 'sigma_f':0., 'l_k':0.}
+    #initial_params = {'mean':1.783386007372333,
+    #                  'sigma_n':-1.922677410742645, 
+    #                  'sigma_f':0.3390422274608337, 
+    #                  'l_k':-1.0909797052150225}
     model = GP_Theano(initial_params)
     outputs = model.get_prediction(x_val, y_val, x_test_val)   
     plot_regression(x_val, y_val, x_test_val, outputs['y_test_mu'],outputs['y_test_var'],'Before Optimization')
-    
-    model.train(x_val, y_val, num_epoch = 100,lr = 1e-2,decay=None,batch_size=20)
+
+    model.train(x_val, y_val, num_epoch = 100,lr = 1e-2,decay=None,batch_size=x_val.shape[0])
     outputs = model.get_prediction(x_val, y_val, x_test_val)   
     plot_regression(x_val, y_val, x_test_val, outputs['y_test_mu'],outputs['y_test_var'],'After Optimization')
     plt.show()

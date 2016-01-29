@@ -34,9 +34,11 @@ class GP_Theano(object):
         print 'Setting up variables ...'
         # Parameters
         if initial_params is None:
-            initial_params = {'sigma_n':0.+np_uniform_scalar(0),
+            initial_params = {'mean':0. +np.uniform_scalar(0),
+                              'sigma_n':0.+np_uniform_scalar(0),
                               'sigma_f':0.+np_uniform_scalar(0),
                               'l_k':0.+np.uniform_scalar(0)}
+        self.mean = shared_scalar(initial_params['mean'])
         self.sigma_n = shared_scalar(initial_params['sigma_n'])
         self.sigma_f = shared_scalar(initial_params['sigma_f'])
         self.l_k = shared_scalar(initial_params['l_k'])
@@ -59,7 +61,7 @@ class GP_Theano(object):
         self.f = {n: theano.function(inputs.values(), f+z, name=n, on_unused_input='ignore')
                      for n, f in f}
 
-        wrt = {'sigma_n':self.sigma_n, 'sigma_f':self.sigma_f, 'l_k':self.l_k}
+        wrt = {'mean':self.mean,'sigma_n':self.sigma_n, 'sigma_f':self.sigma_f, 'l_k':self.l_k}
         self.g = {vn: theano.function(inputs.values(), T.grad(log_likelihood+z,vv),
                                       name=vn,on_unused_input='ignore')
                                       for vn, vv in wrt.iteritems()}
@@ -90,16 +92,18 @@ class GP_Theano(object):
         '''
         # Compute GP prior distribution: mean and covariance matrices (eq 2.13, 2.14)
         K = self.covFunc(X,X,'K') # pior cov
-        m = T.mean(Y)*T.ones_like(Y) # pior mean
+        #m = T.mean(Y)*T.ones_like(Y) # pior mean
+        m = self.mean*T.ones_like(Y) # pior mean
 
         # Compute GP joint prior distribution between training and test (eq 2.18)
         Ks = self.covFunc(X,x_test,'Ks')
         # Pay attention!! here is the self test cov matrix.
-        Kss = T.ones_like(x_test)
+        Kss = self.covFunc(x_test,x_test,'Kss',mode='self_test')
+        #Kss = T.ones_like(x_test)
         #Kss = self.covFunc(x_test, x_test,'Kss')
 
         # noise variance of likGauss
-        sn2 = T.exp(2*self.sigma_n)
+        #sn2 = T.exp(2*self.sigma_n)
 
         # Compute posterior distribution with noise: L,alpha,sW,and log_likelihood.
         sn2 = T.exp(2*self.sigma_n) # noise variance of likGauss
@@ -122,7 +126,7 @@ class GP_Theano(object):
         return K, Ks, Kss, y_test_mu, y_test_var, T.sum(log_likelihood), L, alpha,V, fs2,sW
 
     
-    def covFunc(self,x1,x2,name,method='SE'):
+    def covFunc(self,x1,x2,name,method='SE',mode='cross'):
         '''
         Factorization Implementation of distance function.
         https://chrisjmccormick.wordpress.com/2014/08/22/fast-euclidean-distance-calculation-with-matlab-code/
@@ -130,11 +134,17 @@ class GP_Theano(object):
         if method == 'SE':
             ell = T.exp(self.l_k)
             sf2 = T.exp(2.*self.sigma_f)
-            xx = T.sum(x1**2,axis=1).reshape((x1.shape[0],1))
-            xc = T.dot(x1, x2.T)
-            cc = T.sum(x2**2,axis=1).reshape((1,x2.shape[0]))
-            dist = xx - 2*xc + cc
-            k = sf2 * T.exp(-dist/2/ell)
+            if mode == 'cross':
+                xx = T.sum((x1/ell)**2,axis=1).reshape((x1.shape[0],1))
+                xc = T.dot((x1/ell), (x2/ell).T)
+                cc = T.sum((x2/ell)**2,axis=1).reshape((1,x2.shape[0]))
+                dist = xx - 2*xc + cc
+            elif mode == 'self_test':
+                dist = T.zeros_like(x1)
+            else:
+                raise NotImplementedError
+            #k = sf2 * T.exp(-dist/2/ell)
+            k = sf2 * T.exp(-dist/2)
             #f_cov = theano.function((x1,x2),k,name=name,on_unused_input='ignore')
         else:
             raise NotImplementedError
@@ -169,7 +179,7 @@ class GP_Theano(object):
         '''
         Optimize model's hyper-parameters using SGD
         '''
-        params  = {'sigma_n':self.sigma_n, 'sigma_f':self.sigma_f, 'l_k':self.l_k}
+        params  = {'mean':self.mean,'sigma_n':self.sigma_n, 'sigma_f':self.sigma_f, 'l_k':self.l_k}
         N = x_val.shape[0]
         if batch_size is None:
             batch_size = N
