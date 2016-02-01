@@ -159,20 +159,59 @@ class GP_Theano(object):
         get the likelihood and gradients 
         '''
         inputs = {'X':x_val, 'Y':y_val, 'x_test':x_val}
-        outputs = {n: self.f[n](*inputs.values()) for n in self.f.keys()}
+        #outputs = {n: self.f[n](*inputs.values()) for n in self.f.keys()}
         grads = {n: self.g[n](*inputs.values()) for n in self.g.keys()}
 
-        return grads, outputs
+        return grads#, outputs
     
+
+    def opt(self, train_x_val, train_y_val,params, 
+            lr, momentum = 0., decay=None,
+            nesterov=False, updates={},opt_method='SGD'):
+        '''
+        Gradient based optimizations.
+        '''
+        if len(updates) == 0:
+            for n in params.keys():
+                updates[n] = 0.
+        if opt_method=='SGD':
+            grads = self.get_cost_grads(train_x_val, train_y_val)
+            for n in params.keys():
+                g,p = grads[n], params[n]
+                updates[n] = lr * g
+        elif opt_method =='rmsprop':
+            # RMSPROP: Tieleman, T. and Hinton, G. (2012), Lecture 6.5 - rmsprop, COURSERA:
+            # Neural Networks for Machine Learning.
+            if nesterov and momentum > 0.:
+                # nesterov momentum, make a move according to momentum first
+                # then calculate the gradients.
+                for n in params.keys():
+                    params[n].set_value( params[n].get_value() + momentum * updates[n])
+            grads = self.get_cost_grads(train_x_val, train_y_val)
+            for n in params.keys():
+                g, p = grads[n], params[n]
+                self.moving_mean_squared[n] = (decay * self.moving_mean_squared[n] + 
+                                               (1.-decay) * g ** 2)
+                updates[n] = lr * g / (np.sqrt(self.moving_mean_squared[n])+ 1e-8)
+        else:
+            raise NotImplementedError
+        return updates
 
     def train(self, x_val, y_val,
               lr = 0.001, momentum = 0,decay = None,
-              nesterov = None,batch_size=None,
-              num_epoch = 10):
+              nesterov = False,batch_size=None,
+              num_epoch = 10,opt_method='SGD'):
         '''
-        Optimize model's hyper-parameters using SGD
+        Move hyper-parameters according to opt_method on mini-batch.
         '''
         params  = {'mean':self.mean,'sigma_n':self.sigma_n, 'sigma_f':self.sigma_f, 'l_k':self.l_k}
+        updates = {}
+        # Initialize cache at the begining.
+        if opt_method == 'rmsprop':
+            self.moving_mean_squared={}
+            for n in params.keys():
+                self.moving_mean_squared[n] = 0.
+        
         N = x_val.shape[0]
         if batch_size is None:
             batch_size = N
@@ -183,19 +222,21 @@ class GP_Theano(object):
         train_index = np.arange(0,N)
         
         for epoch in range(num_epoch):
-            if decay is not None:
-                lr = lr * (1./(1. + decay * epoch))
+            #if decay is not None:
+            #    lr = lr * (1./(1. + decay * epoch))
             for i in range(num_batches):
                 np.random.shuffle(train_index)
                 batch_x_val = x_val[train_index,:]
                 batch_y_val = y_val[train_index,:]
 
-                grads,outputs = self.get_cost_grads(batch_x_val, batch_y_val)
-                #print 'Log Likelihood = ', outputs['log_likelihood']
-                # update parameters
+                updates = self.opt(batch_x_val, batch_y_val, params, 
+                        lr=lr,momentum=momentum,decay=decay,nesterov=nesterov,updates=updates,
+                        opt_method=opt_method)
                 for n in params.keys():
-                    g,p = grads[n], params[n]
-                    p.set_value(p.get_value() + lr * g)
+                    p = params[n]
+                    p.set_value(p.get_value() + updates[n])
+            
+            outputs = self.get_prediction(x_val, y_val, x_val) # Evaluate trained outputs
             if epoch % 100 == 0:    
                 print 'On Epoch %d, Log Likelihood = '%epoch, outputs['log_likelihood']
         print 'END Training, Log Likelihood = ', outputs['log_likelihood']
