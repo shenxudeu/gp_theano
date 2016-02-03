@@ -47,7 +47,7 @@ def demo():
     #                  'sigma_f':0.3390422274608337, 
     #                  'l_k':-1.0909797052150225}
     model = GP_Theano(initial_params)
-    outputs = model.get_prediction(x_val, y_val, x_test_val)   
+    outputs = model.get_outputs(x_val, y_val, x_test_val)   
     plot_regression(x_val, y_val, x_test_val, outputs['y_test_mu'],outputs['y_test_var'],'Before Optimization')
 
     model.train(x_val, y_val, num_epoch = 100,
@@ -56,9 +56,29 @@ def demo():
     #model.train(x_val, y_val, num_epoch = 200,
     #        lr = 1e-2,decay=0.99,opt_method='SGD', batch_size=x_val.shape[0])
 
-    outputs = model.get_prediction(x_val, y_val, x_test_val)   
+    outputs = model.get_outputs(x_val, y_val, x_test_val)   
     plot_regression(x_val, y_val, x_test_val, outputs['y_test_mu'],outputs['y_test_var'],'After Optimization')
     plt.show()
 
+
+def demo_optimizer():
+    demoData = np.load('regression_data.npz')
+    x_val = demoData['x']            # training data
+    y_val = demoData['y']            # training target
+    x_test_val = demoData['xstar']        # test data
+     
+    from gptheano_model import GP_Theano
+    initial_params = {'mean':np.mean(y_val), 'sigma_n':np.log(.1), 'sigma_f':0., 'l_k':0.}
+    model = GP_Theano(initial_params)
+    outputs = model.get_outputs(x_val, y_val, x_test_val)   
+    plot_regression(x_val, y_val, x_test_val, outputs['y_test_mu'],outputs['y_test_var'],'Before Optimization')
+    
+    model.train_by_optimizer(x_val, y_val, number_epoch=100,batch_size=20)
+
+    outputs = model.get_outputs(x_val, y_val, x_test_val)   
+    plot_regression(x_val, y_val, x_test_val, outputs['y_test_mu'],outputs['y_test_var'],'After Optimization')
+    plt.show()
+
+
 if __name__ == '__main__':
-    demo()
+    demo_optimizer()
